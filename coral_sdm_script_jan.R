@@ -118,7 +118,7 @@ coral_group_abun$group<-as.factor(coral_group_abun$group)
 #ok now plot abundance by lat
 ggplot(coral_group_abun, aes(x=lat, y=abundance, col=group))+
   geom_point()+
-  geom_smooth(method='lm', se=FALSE)+
+  geom_smooth(method='lm', se=TRUE)+
   theme_bw()+
   labs(x='Latitude', y='Percentage Cover')+
   facet_wrap(~group, scales='free_y')
@@ -135,7 +135,7 @@ cgroup_site_prop<- coral_group_abun %>% group_by(site, lat, lon) %>% mutate(tota
 #plot
 ggplot(cgroup_site_prop, aes(x=lat, y=prop, col=group))+
   geom_point()+
-  geom_smooth(method='lm')+
+  geom_smooth(method='lm', se=TRUE)+
   facet_wrap(~group, scales="free_y") 
  
 
@@ -337,20 +337,20 @@ View(extract_all[[1]])
 
 #betareg between 0 and 1 so make data a proportion 
 
-divide_func<- function(data){
-  data$abundance<-data$abundance/100
-  return(data)
-}
+#divide_func<- function(data){
+ # data$abundance<-data$abundance/100
+ # return(data)
+#}
 
-extract_all<-lapply(extract_all, divide_func)
+#extract_all<-lapply(extract_all, divide_func)
 
 #make it all with 0.0001 added for betareg
 
-add_func<- function(data){
-  data$abundance<-data$abundance + 0.0001
-  return(data)
-}
-extract_all<-lapply(extract_all, add_func)
+#add_func<- function(data){
+ # data$abundance<-data$abundance + 0.0001
+ # return(data)
+#}
+#extract_all<-lapply(extract_all, add_func)
 
 
 
@@ -364,7 +364,7 @@ for (i in 1:length(extract_all)){
 
 par(mfrow=c(3,3))
 for (i in 1:length(extract_all)){
-  hist(abs(extract_all[[i]]$abundance)^(1/3), main=i)
+  hist((extract_all[[i]]$abundance)^(1/3), main=i)
 }
 
 par(mfrow=c(3,3))
@@ -372,10 +372,21 @@ for (i in 1:length(extract_all)){
   hist(log(extract_all[[i]]$abundance), main=i)
 }
 
+
 #third root transform group 1,2 and 4
 #4th root transform group 2
 
-extract_all[[3]]$abundance
+#try 3rd root transforming group 1, 2 and 4 and just running lm models with that 
+trans1<-extract_all[[1]]
+trans2<-extract_all[[2]]
+trans3<-extract_all[[4]]
+
+trans1$abundance<- ceiling(trans1$abundance)
+trans2$abundance<-ceiling(trans2$abundance)
+trans3$abundance<-ceiling(trans3$abundance)
+
+extract_all<-list(trans1, trans2, trans3)
+
 
 #test the individual models 
 library(MASS)
@@ -398,6 +409,8 @@ qqnorm(resid(testm1))
 library(betareg)
 library(MASS)
 library(gamlss)
+library(ggfortify)
+
 
 
 models_all<- function(data){
@@ -418,50 +431,16 @@ models_all<- function(data){
     #make models (with stepwise beta regression as bounded between 0-1)
     
     ########GLM
-    #glm1<-glm.nb(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss +BO2_lightbotltmax_bdmin +BO2_chlomean_ss, data=train)
+    glm1<-glm.nb(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss +BO2_lightbotltmax_bdmin +BO2_chlomean_ss, data=train)
     
-    glm1<-betareg(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss +BO2_lightbotltmax_bdmin +BO2_chlomean_ss, data=train)
-    
-    AIC(glm1)
-   
-    #extract abundance 
-    abundance<-train$abundance
-    abundance<-as.data.frame(abundance)
-    
-    
-    #make df for loop to fill 
-    glm_step_table<-data.frame(summary(glm1)$coefficients )
-    glm_step_table<-glm_step_table[-1,]
-    out_varib<-row.names(glm_step_table[glm_step_table[,4]>=0.1,])
-    
-    #set up formula to change 
-    form<-formula(paste(abundance, "~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss + BO2_lightbotltmax_bdmin", sep=""))
-    
-    #run step loop 
-    for(g in out_varib)
-    {
-      g_temp<-g
-      
-      if(g_temp=="BO_sstmin"){form_g1<-update(form, ~. -(BO_sstmin))}
-      if(g_temp=="BO2_curvelmax_ss"){form_g1<-update(form, ~. -(BO2_curvelmax_ss)) }
-      if(g_temp=="BO2_salinitymean_ss"){form_g1<-update(form, ~. -(BO2_salinitymean_ss))}
-      if(g_temp=="BO2_chlomean_ss"){form_g1<-update(form, ~. -(BO2_chlomean_ss))}
-      if(g_temp=="BO2_lightbotltmax_bdmin"){form_g1<-update(form, ~. -(BO2_lightbotltmax_bdmin))}
-      
-      glm2 <-betareg(form_g1, data=train,   na.action=na.omit)
-      
-      if(AIC(glm2)<=AIC(glm1)){form<-form_g1
-      print(paste(g, " dropped", sep=""))}
-    }
-    
-    glm1 <-betareg(form, data=train,  na.action=na.omit)
+    #glm1<-lm(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss +BO2_lightbotltmax_bdmin +BO2_chlomean_ss, data=train)
+    glm1<-step(glm1)
     
     summary(glm1)
     
-    
     ##GAM 
     gam1<-gam(abundance ~ s(BO_sstmin, k=5) + s(BO2_curvelmax_ss, k=5) + s(BO2_salinitymean_ss, k=5) + s(BO2_chlomean_ss,k=5) + s(BO2_lightbotltmax_bdmin, k=5),
-         family=betar()  , data=train) #family=nb(theta=NULL, link="log")    family=binomial()
+         family=nb()  , data=train) #family=nb(theta=NULL, link="log")    family=binomial()
     
     #extract abundance 
     abundance<-train$abundance
@@ -486,13 +465,13 @@ models_all<- function(data){
       if(g_temp=="s(BO2_chlomean_ss, k=5)"){form_g1<-update(form, ~. -s(BO2_chlomean_ss, k=5))}
       if(g_temp=="s(BO2_lightbotltmax_bdmin, k=5)"){form_g1<-update(form, ~. -s(BO2_lightbotltmax_bdmin, k=5))}
       
-      gam2 <-gam(form_g1, data=train,  family=betar(), na.action=na.omit)
+      gam2 <-gam(form_g1, data=train,  family=nb(), na.action=na.omit)
       
       if(AIC(gam2)<=AIC(gam1)){form<-form_g1
       print(paste(g, " dropped", sep=""))}
     }
     
-    gam1 <-gam(form, data=train,  family=betar(), na.action=na.omit)
+    gam1 <-gam(form, data=train,  family=nb(), na.action=na.omit)
     
     
     
@@ -608,9 +587,9 @@ allrmse<-lapply(extract_all, models_all)
 
 average_km<-function(data){
   
-  glm_av<- mean(data$glmR)
-  gam_av<-mean(data$gamR)
-  rf_av<-mean(data$rfR)
+  glm_av<- mean(data$glmR, na.rm=TRUE)
+  gam_av<-mean(data$gamR, na.rm=TRUE)
+  rf_av<-mean(data$rfR, na.rm=TRUE)
   
   averages<-data.frame(glm_av, gam_av, rf_av)
   
