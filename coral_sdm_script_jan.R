@@ -439,7 +439,7 @@ models_all<- function(data){
     #make models (with stepwise beta regression as bounded between 0-1)
     
     ########GLM
-    glm1<- betareg(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss +BO2_lightbotltmax_bdmin +BO2_chlomean_ss, link='log', data=train)
+    glm1<- betareg(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss +BO2_lightbotltmax_bdmin +BO2_chlomean_ss, link='logit', data=train)
     
     #extract abundance 
 
@@ -477,7 +477,7 @@ models_all<- function(data){
       if(g_temp=="BO2_chlomean_ss"){form_g1<-update(form, ~. -(BO2_chlomean_ss))}
       if(g_temp=="BO2_lightbotltmax_bdmin"){form_g1<-update(form, ~. -(BO2_lightbotltmax_bdmin))}
 
-      glm2 <-betareg(form_g1, data=train,   na.action=na.omit)
+      glm2 <-betareg(form_g1, data=train, link='logit' , na.action=na.omit)
 
       if(AIC(glm2)<=AIC(glm1)){form<-form_g1
 
@@ -485,14 +485,14 @@ models_all<- function(data){
 
     }
 
-    glm1 <-betareg(form, data=train,  na.action=na.omit)
+    glm1 <-betareg(form, data=train, link='logit' , na.action=na.omit)
     
 
     summary(glm1)
 
     ##GAM 
     gam1<-gam(abundance ~ s(BO_sstmin, k=5) + s(BO2_curvelmax_ss, k=5) + s(BO2_salinitymean_ss, k=5) + s(BO2_chlomean_ss,k=5) + s(BO2_lightbotltmax_bdmin, k=5),
-         family=betar(link='log')  , data=train) #family=nb(theta=NULL, link="log")    family=binomial()
+         family=betar(link='logit')  , data=train) #family=nb(theta=NULL, link="log")    family=binomial()
     
     #extract abundance 
     abundance<-train$abundance
@@ -517,13 +517,13 @@ models_all<- function(data){
       if(g_temp=="s(BO2_chlomean_ss, k=5)"){form_g1<-update(form, ~. -s(BO2_chlomean_ss, k=5))}
       if(g_temp=="s(BO2_lightbotltmax_bdmin, k=5)"){form_g1<-update(form, ~. -s(BO2_lightbotltmax_bdmin, k=5))}
       
-      gam2 <-gam(form_g1, data=train,  family=nb(), na.action=na.omit)
+      gam2 <-gam(form_g1, data=train,  family = betar(link='logit'), na.action=na.omit)
       
       if(AIC(gam2)<=AIC(gam1)){form<-form_g1
       print(paste(g, " dropped", sep=""))}
     }
     
-    gam1 <-gam(form, data=train,  family=nb(), na.action=na.omit)
+    gam1 <-gam(form, data=train,  family=betar(link='logit'), na.action=na.omit)
     
     summary(gam1)
     
@@ -696,11 +696,65 @@ average_pear[[2]]
 
 for (i in 1:length(extract_all)) {
   
-  glm_gr<-glm.nb(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss +BO2_lightbotltmax_bdmin ,  data=extract_all[[i]])
-  glm_gr<-step(glm_gr, trace = 0, na.action=na.omit)
+  ########GLM
+  glm1<- betareg(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss +BO2_lightbotltmax_bdmin +BO2_chlomean_ss, link='logit', data=extract_all[[i]])
+  
+  #extract abundance 
+  
+  abundance<-extract_all[[i]]$abundance
+  
+  abundance<-as.data.frame(abundance)
+  
+  
+  
+  #make df for loop to fill 
+  
+  
+  glm_step_table<-data.frame(summary(glm1)$coefficients )
+  
+  glm_step_table<-glm_step_table[-1,]
+  
+  out_varib<-row.names(glm_step_table[glm_step_table[,4]>=0.1,])
+  
+  
+  #set up formula to change 
+  form<-formula(paste(abundance, "~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss + BO2_lightbotltmax_bdmin", sep=""))
+  
+  #run step loop 
+  
+  for(g in out_varib)
+    
+    
+  {
+    
+    g_temp<-g
+    
+    if(g_temp=="BO_sstmin"){form_g1<-update(form, ~. -(BO_sstmin))}
+    if(g_temp=="BO2_curvelmax_ss"){form_g1<-update(form, ~. -(BO2_curvelmax_ss)) }
+    if(g_temp=="BO2_salinitymean_ss"){form_g1<-update(form, ~. -(BO2_salinitymean_ss))}
+    if(g_temp=="BO2_chlomean_ss"){form_g1<-update(form, ~. -(BO2_chlomean_ss))}
+    if(g_temp=="BO2_lightbotltmax_bdmin"){form_g1<-update(form, ~. -(BO2_lightbotltmax_bdmin))}
+    
+    glm2 <-betareg(form_g1, data=extract_all[[i]], link='logit'  , na.action=na.omit)
+    
+    if(AIC(glm2)<=AIC(glm1)){form<-form_g1
+    
+    print(paste(g, " dropped", sep=""))}
+    
+  }
+  
+  glm_gr <-betareg(form, data=extract_all[[i]], link='logit',  na.action=na.omit)
+  
+  
+  summary(glm1)
+  
+  
+  
+  
   
   #GAM
-  gam1<-gam(abundance ~ s(BO_sstmin, k=5) + s(BO2_curvelmax_ss, k=5) + s(BO2_salinitymean_ss, k=5) + s(BO2_chlomean_ss, k=5) + s(BO2_lightbotltmax_bdmin, k=5), family=nb(), data=extract_all[[i]])
+  gam1<-gam(abundance ~ s(BO_sstmin, k=5) + s(BO2_curvelmax_ss, k=5) + s(BO2_salinitymean_ss, k=5) + s(BO2_chlomean_ss, k=5) + s(BO2_lightbotltmax_bdmin, k=5), 
+            family=betar(link='logit'), data=extract_all[[i]])
   
   #extract abundance 
   abundance<-extract_all[[i]]$abundance
@@ -725,13 +779,13 @@ for (i in 1:length(extract_all)) {
     if(g_temp=="s(BO2_chlomean_ss, k=5)"){form_g1<-update(form, ~. -s(BO2_chlomean_ss, k=5))}
     if(g_temp=="s(BO2_lightbotltmax_bdmin, k=5)"){form_g1<-update(form, ~. -s(BO2_lightbotltmax_bdmin, k=5))}
     
-    gam2 <-gam(form_g1, data=extract_all[[i]],  family=nb(), na.action=na.omit)
+    gam2 <-gam(form_g1, data=extract_all[[i]],  family=betar(link='logit'), na.action=na.omit)
     
     if(AIC(gam2)<=AIC(gam1)){form<-form_g1
     print(paste(g, " dropped", sep=""))}
   }
   
-  gam_gr<-gam(form, data=extract_all[[i]],  family=nb(), na.action=na.omit)  
+  gam_gr<-gam(form, data=extract_all[[i]],  family=betar(link='logit'), na.action=na.omit)  
   
   #RF
   rf_gr<-randomForest(formula=abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + 
@@ -741,19 +795,67 @@ for (i in 1:length(extract_all)) {
   assign(paste0('gam_gr', i), gam_gr)
   assign(paste0('rf_gr', i), rf_gr)
   
-  pr_glm<-predict(area_pred, glm_gr)
-  pr_gam<-predict(area_pred, gam_gr)
-  pr_rf<-predict(area_pred, rf_gr)    
+  pr_glm<-predict(area_pred, glm_gr, type='response')
+  pr_gam<-predict(area_pred, gam_gr, type='response')
+  pr_rf<-predict(area_pred, rf_gr, type='response')    
   
   assign(paste0('pr_glm_gr', i), pr_glm)
   assign(paste0('pr_gam_gr', i), pr_gam)
   assign(paste0('pr_rf_gr', i), pr_rf)
   
+  #make it so only the significant models are included 
+  
+  #make all the RMSE values 1/ themselves so that the larger errors become smaller proportions
+  averages[[i]]<- averages[[i]]/((averages[[i]])^2)
+  
+  
+  #extract p values of glm coefs 
+  glm_pvals<- summary(glm_gr)$coefficients$mean[,4]
+  #remove intercept column 
+  glm_pvals<- glm_pvals[-1]
+  
+  #trues are 1 and false 0. if sum =length then they are all over 0.05 and this makes averages 0
+  if (sum(glm_pvals > 0.05) == length(glm_pvals)){
+    averages[[i]][,1]<-0
+    average_pear[[i]][,1]<- 0
+  }                        
+  
+  #now say if the RMSE is larger then the mean, proportion= 0
+  if (averages.df[i, 1]> (0.5*(max(extract_all[[i]]$abundance)-min(extract_all[[i]]$abundance)))){
+    averages[[i]][,1]<- 0 
+    average_pear[[i]][,1]<-0
+  }
+  
+  #now same for gam 
+  gam_step_table<-data.frame(summary(gam_gr)$s.table)
+  
+  if (sum (gam_step_table$p.value > 0.05)== length(gam_step_table$p.value)) {
+    averages[[i]][,2]<-0
+    average_pear[[i]][,2]<-0
+  }
+  
+  #if RMSE is larger then mean make it zero
+  if (averages.df[i, 2]> (0.5*(max(extract_all[[i]]$abundance)-min(extract_all[[i]]$abundance)))){
+    averages[[i]][,2]<- 0 
+    average_pear[[i]][,2]<- 0
+  }
+  
+  #finally for RF
+  if (averages.df[i, 3]> (0.5*(max(extract_all[[i]]$abundance)-min(extract_all[[i]]$abundance)))){
+    averages[[i]][,3]<- 0
+    average_pear[[i]][,3]<-0
+  }
+  
+  
+  
+  
+  
+  
   #make the ensemble model from RMSE and Pearsons proportions 
   props<-data.frame(glmR=1, gamR=1, rfR=1, glmP=1, gamP=1, rfP=1)
-  props[1,1]<-1-(averages[[i]][1,1]/(averages[[i]][1,1]+averages[[i]][1,2]+averages[[i]][1,3]))
-  props[1,2]<-1-(averages[[i]][1,2]/(averages[[i]][1,1]+averages[[i]][1,2]+averages[[i]][1,3]))
-  props[1,3]<-1-(averages[[i]][1,3]/(averages[[i]][1,1]+averages[[i]][1,2]+averages[[i]][1,3]))
+  props[1,1]<-(averages[[i]][1,1]/(averages[[i]][1,1]+averages[[i]][1,2]+averages[[i]][1,3]))
+  props[1,2]<-(averages[[i]][1,2]/(averages[[i]][1,1]+averages[[i]][1,2]+averages[[i]][1,3]))
+  props[1,3]<-(averages[[i]][1,3]/(averages[[i]][1,1]+averages[[i]][1,2]+averages[[i]][1,3]))
   
   props[1,4]<-abs(average_pear[[i]][1,1])/(abs(average_pear[[i]][1,1])+abs(average_pear[[i]][1,2])+abs(average_pear[[i]][1,3]))
   props[1,5]<-abs(average_pear[[i]][1,2])/(abs(average_pear[[i]][1,1])+abs(average_pear[[i]][1,2])+abs(average_pear[[i]][1,3]))
@@ -771,6 +873,7 @@ for (i in 1:length(extract_all)) {
   
 }
 
+plot(ensemble_gr1)
 
 #check model 
 summary(glm_gr1)
@@ -799,9 +902,7 @@ summary(glm_gr6)
 summary(gam_gr6)
 varImpPlot(rf_gr6)
 
-summary(glm_gr7)
-summary(gam_gr7)
-varImpPlot(rf_gr7)
+
 
 
 
@@ -814,7 +915,7 @@ varImpPlot(rf_gr7)
 ens_list<-lapply(ls(pattern="ensemble_gr"),get)
 
 par(mar=c(1.2,1.2,1.2,1.2))
-par(mfrow=c(1,2))
+par(mfrow=c(2,3))
 
 for ( i in 1:length(ens_list)){
   plot(ens_list[[i]], main= i )
