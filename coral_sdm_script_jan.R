@@ -1061,20 +1061,53 @@ for (i in 1:length(fut_ens26_list)){
 }
 
 
+#try cropping first?
+
+buffer30k<-readOGR('30k_coastplot/outline30k.shp')
+crs(buffer30k)
+
+buffer30k<-spTransform(buffer30k,  '+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0' )
+
+#now mask ens 85 by buffer crop
+
+for (i in 1:length(fut_ens85_list)){
+  ens_mask<- mask(fut_ens85_list[[i]], buffer30k)
+  assign(paste0('ens85_mask_gr', i), ens_mask)
+}
+
+ens_mask85_list<-lapply(ls(pattern='ens85_mask_gr'), get)
+
+plot(ens_mask85_list[[1]])
+
+#mask 26
+for (i in 1:length(fut_ens26_list)){
+  ens_mask<- mask(fut_ens26_list[[i]], buffer30k)
+  assign(paste0('ens26_mask_gr', i), ens_mask)
+}
+
+ens_mask26_list<-lapply(ls(pattern='ens26_mask_gr'), get)
+
+
+
 #now get difference between two and plot
 #now get difference between two and plot
 #before getting difference standardise abundance between zero and 1 ----
 
-normalize <- function(x) {
-  return ((x -  x@data@min)/ (x@data@max -  x@data@min))
-}
+#normalize <- function(x) {
+#  return ((x -  x@data@min)/ (x@data@max -  x@data@min))
+#}
 
-fut_ens85_norm<- lapply(fut_ens85_list, normalize)
+#fut_ens85_norm<- lapply(fut_ens85_list, normalize)
 
-ens_list_norm<-lapply(ens_list, normalize)
+#ens_list_norm<-lapply(ens_list, normalize)
 
-fut_ens26_norm<-lapply(fut_ens26_list, normalize)
+#fut_ens26_norm<-lapply(fut_ens26_list, normalize)
 
+fut_ens85_norm<- ens_mask85_list
+
+ens_list_norm<-ens_list
+
+fut_ens26_norm<-ens_mask26_list
 
 
 
@@ -1105,7 +1138,7 @@ for ( i in 1:length(fut_ens26_norm)){
 
 dif_list26<-lapply(ls(pattern='dif_gr'), get)
 
-par(mfrow=c(3,3))
+par(mfrow=c(2,3))
 for (i in 1:length(dif_list26)){
   plot(dif_list26[[i]], main=paste0('Group ', i), col=pal)
   plot(japan_outline, add=TRUE, col='light grey', border='black')
@@ -1154,20 +1187,24 @@ for (i in 1:length(dif_list26)){
 
 #st_write(outline_30k, '30k_coastplot', 'outline30k.shp', driver='ESRI Shapefile')
 
-buffer30k<-readOGR('30k_coastplot/outline30k.shp')
-crs(buffer30k)
+#buffer30k<-readOGR('30k_coastplot/outline30k.shp')
+#crs(buffer30k)
 
-buffer30k<-spTransform(buffer30k,  '+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0' )
+#buffer30k<-spTransform(buffer30k,  '+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0' )
 
-crs(japan_outline)
+#crs(japan_outline)
 #now mask dif 85 by buffer crop
 
-for (i in 1:length(dif_list85)){
-  dif_mask<- mask(dif_list85[[i]], buffer30k)
-  assign(paste0('dif85_mask_gr', i), dif_mask)
-}
+#for (i in 1:length(dif_list85)){
+#  dif_mask<- mask(dif_list85[[i]], buffer30k)
+#  assign(paste0('dif85_mask_gr', i), dif_mask)
+#}
 
-dif_mask85<-lapply(ls(pattern='dif85_mask_gr'), get)
+#dif_mask85<-lapply(ls(pattern='dif85_mask_gr'), get)
+
+dif_mask85<-dif_list85
+dif_mask26<-dif_list26
+
 
 plot(dif_mask85[[1]])
 
@@ -1228,7 +1265,7 @@ dif85_all_df<-do.call(rbind, dif85_values_all)
 
 dif85_all_df$group<-as.factor(dif85_all_df$group)
 
-ggplot(dif85_all_df, aes(x=x, y=values, col=group))+
+ggplot(dif85_all_df, aes(x=y, y=values, col=group))+
   geom_smooth(method='loess', se=FALSE)
 # facet_zoom(ylim=c(-2, 2))  #zooms in on the smaller ones 
 
@@ -1293,401 +1330,86 @@ dif_values_all<- rbind(dif85_all_df, dif26_all_df)
 dif_values_all$climate<-as.factor(dif_values_all$climate)
 
 
-ggplot(dif_values_all, aes(x=x, y=values, col=group))+
-  geom_smooth(method='loess', se=FALSE)+
+ggplot(dif_values_all, aes(x=y, y=values, col=group))+
+  geom_smooth(method='loess')+
   facet_wrap(~climate)+
-  theme_bw()
+  theme_bw()+
+  geom_hline(yintercept=0, linetype='dotted')+
+  labs(y='Change in percentage cover', x='Latitude')
+  
 
 write.csv(dif_values_all, 'dif_values_all_coral_morph.csv')
 
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-#now future 
-rm(glm_gr)
-
-glm_list<-lapply(ls(pattern='glm_gr'), get)
-
-rm(rf_gr)
-
-rf_list<-lapply(ls(pattern='rf_gr'), get)
-
-#make sure the colnames match
-names(future_preds)<-names(current_preds)
-plot(future_preds)
-
-
-for (i in 1:length(more_abun)) {
-  
-  pr_glm_fut<-predict(future_preds, glm_list[[i]])
-  pr_rf_fut<-predict(future_preds, rf_list[[i+2]])
-  
-  assign(paste0('glm_fut', i), pr_glm_fut)
-  assign(paste0('rf_fut', i), pr_rf_fut)
-  
-  props<-data.frame(glm=1, rf=1)
-  props[1,1]<-1-(averages[[i]][1,1]/(averages[[i]][1,1]++averages[[i]][1,3]))
-  props[1,2]<-1-(averages[[i]][1,3]/(averages[[i]][1,1]+averages[[i]][1,3]))
-  
-  ensemble_fut<- ((pr_glm_fut*props[1,1])+(pr_rf_fut*props[1,2]))
-  
-  assign(paste0('fut_ensemble_gr', i), ensemble_fut)
-  
-  
-  
-}
-plot(fut_ensemble_gr2)
-
-fut_ens_list<-lapply(ls(pattern='fut_ensemble_gr'), get)
-
-#plot
-par(mfrow=c(1,2))
-
-for (i in 1:length(fut_ens_list)){
-  plot(fut_ens_list[[i]])
-}
-
-#now get difference between two and plot
-for ( i in 1:length(fut_ens_list)){
-  
-  diff<- fut_ens_list[[i]] - ens_list[[i]]
-  assign(paste0('dif_gr', i), diff)
-}
-
-dif_list<-lapply(ls(pattern='dif_gr'), get)
-
-par(mfrow=c(1,2))
-for (i in 1:length(dif_list)){
-  plot(dif_list[[i]])
+#now actually standardise
+standard<- function (x){
+  return((x- mean(x[x]))/sd(x[x]) )
 }
 
 
-#ooookkkkk
-#now group 3 and 4
-install.packages('zoib')
-library(zoib)
-install.packages('rjags')
-library(rjags)
-
-#repeat models 
-models_all<- function(data){
-  
-  rmse_all<-data.frame(glm=1, gam=1, rf=1)  
-  
-  
-  for (i in 1:100){
-    
-    #define test and training data
-    test<- data[sample(nrow(data), size=5, replace=FALSE),]  
-    train<- data[(! row.names(data) %in% row.names(test)), ]
-    
-    obvs<-test$abundance
-    
-    #make models (with zero inflated beta regression as bounded between 0-1)
-    #glm1<-zoib(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss +BO2_lightbotltmax_bdmin +BO2_chlomean_ss|1|BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss +BO2_lightbotltmax_bdmin +BO2_chlomean_ss,  data=train, zero.inflation = TRUE, one.inflation = FALSE)
-    glm1<-glm(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss +BO2_lightbotltmax_bdmin +BO2_chlomean_ss, 
-               family=binomial(), data=train)
-    
-    gam1<-gam(abundance ~ s(BO_sstmin, k=5) + s(BO2_curvelmax_ss, k=5) + s(BO2_salinitymean_ss, k=5) + s(BO2_chlomean_ss,k=5) +s(BO2_lightbotltmax_bdmin, k=5),
-              family=binomial  , data=train) #family=nb(theta=NULL, link="log")    family=binomial()
-    rf1<-randomForest(formula=abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + 
-                        BO2_chlomean_ss +BO2_lightbotltmax_bdmin, data=train, ntree=300,   importance=TRUE   )
-    
-    #predict models for test
-    prglm<-predict( glm1, test)
-    prgam<-predict(gam1, test)
-    prRF<-predict(rf1, test)
-    
-    #now rmse for all
-    rmse_all[i,1]<-rmse(obvs, prglm)
-    rmse_all[i,2]<-rmse(obvs, prgam)
-    rmse_all[i,3]<-rmse(obvs, prRF)
-    
-    
-  }
-  
-  return(rmse_all) 
-  
-  
-}
-
-#3 and 4 have mostly zeros so can;t bootstrap??? #just deal with group 1 and two for now
-less_abun<-list(extract_all[[3]], extract_all[[4]])
+stand_list<-lapply(dif_list85, standard )
+par(mfrow=c(3,3))
+for (i in 1:length(stand_list)){
+  plot(stand_list[[i]])
+} 
 
 
-allrmse<-lapply(less_abun, models_all)  # ok worked, need to sort out group 3 and 4
-
-#get averages as it didnt work 
-
-average_km<-function(data){
-  
-  glm_av<- mean(data$glm)
-  gam_av<-mean(data$gam)
-  rf_av<-mean(data$rf)
-  
-  averages<-data.frame(glm_av, gam_av, rf_av)
-  
-  return(averages)
-  
-}
-
-averages<-lapply(allrmse, average_km)
-
-averages[[1]]
-averages[[2]]
-#gam is bad so dont use #this is pretty bad sort this out
-
-#full model, predict and ensemble   #loop
-
-for (i in 1:length(less_abun)) {
-  
-  glm_gr<-betareg(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss ,  data=more_abun[[i]])
-  rf_gr<-randomForest(formula=abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + 
-                        BO2_chlomean_ss, data=less_abun[[i]], ntree=300, importance=TRUE   )
-  
-  assign(paste0('glm_gr2', i), glm_gr)
-  assign(paste0('rf_gr2', i), rf_gr)
-  
-  pr_glm<-predict(area_pred, glm_gr)
-  pr_rf<-predict(area_pred, rf_gr)    
-  
-  assign(paste0('pr_glm_gr2', i), pr_glm)
-  assign(paste0('pr_rf_gr2', i), pr_rf)
-  
-  props<-data.frame(glm=1, rf=1)
-  props[1,1]<-1-(averages[[i]][1,1]/(averages[[i]][1,1]++averages[[i]][1,3]))
-  props[1,2]<-1-(averages[[i]][1,3]/(averages[[i]][1,1]+averages[[i]][1,3]))
-  
-  assign(paste0('prop_gr2', i), props)
-  
-  ensemble<- ((pr_glm*props[1,1])+(pr_rf*props[1,2]))
-  
-  assign(paste0('ensemble_gr2', i), ensemble)
-  
-  
-}
-
-#plot ensembles
-
-ens2_list<-list(ensemble_gr21, ensemble_gr22)
-
-par(mar=c(1.2,1.2,1.2,1.2))
-par(mfrow=c(1,2))
-
-for ( i in 1:length(ens2_list)){
-  plot(ens_list[[i]], main= i )
-  plot(japan_outline, add=TRUE)
-  
-}
-
-library(viridis)
-pal<-viridis(option='plasma', direction=-1, n=40)
-
-ens_list_all<-list(ensemble_gr1, ensemble_gr2, ensemble_gr21, ensemble_gr22)
-
-par(mfrow=c(2,2))
-for(i in 1:length(ens_list_all)){
-  plot(ens_list_all[[i]], col=pal, main=paste0('Group ', i))
-  plot(japan_outline, add=TRUE, col='light grey', border='black')
-  box()
-  
-}
-
-#now future 
-rm(glm_gr)
-
-glm_list2<-list(glm_gr21, glm_gr22)
-
-rm(rf_gr)
-
-rf_list2<-list(rf_gr21, rf_gr22)
-
-#make sure the colnames match
-names(future_preds)<-names(current_preds)
-plot(future_preds)
-
-
-for (i in 1:length(less_abun)) {
-  
-  pr_glm_fut<-predict(future_preds, glm_list2[[i]])
-  pr_rf_fut<-predict(future_preds, rf_list2[[i]])
-  
-  assign(paste0('glm_fut2', i), pr_glm_fut)
-  assign(paste0('rf_fut2', i), pr_rf_fut)
-  
-  props<-data.frame(glm=1, rf=1)
-  props[1,1]<-1-(averages[[i]][1,1]/(averages[[i]][1,1]+averages[[i]][1,3]))
-  props[1,2]<-1-(averages[[i]][1,3]/(averages[[i]][1,1]+averages[[i]][1,3]))
-  
-  ensemble_fut<- ((pr_glm_fut*props[1,1])+(pr_rf_fut*props[1,2]))
-  
-  assign(paste0('fut_ensemble_gr2', i), ensemble_fut)
-  
-  
-  
-}
-plot(fut_ensemble_gr21)
-
-fut_ens_list2<-list(fut_ensemble_gr21, fut_ensemble_gr22)
-
-
-#plot
-par(mfrow=c(1,2))
-
-for (i in 1:length(fut_ens_list2)){
-  plot(fut_ens_list2[[i]])
-}
-
-#now get difference between two and plot
-for ( i in 1:length(fut_ens_list2)){
-  
-  diff<- fut_ens_list2[[i]] - ens2_list[[i]]
-  assign(paste0('dif_gr2', i), diff)
-}
-
-dif_list2<-list(dif_gr21, dif_gr22)
-
-
-dif_all<-list(dif_gr1, dif_gr2, dif_gr21, dif_gr22)
-
-
-#now plot
-par(mfrow=c(2,2))
-par(mar=c(3,2,2,2))
-for (i in 1:length(dif_all)){
-  plot(dif_all[[i]], col=pal, main=paste0('Group ',i))
-  plot(japan_outline, add=TRUE, col='light grey', border='black')
-  box()
-}
-
-
-
-
-
-
-
-
-#split into below zero and above zero ## all tropical
-dif_list<-dif_all
-
-for ( i in 1:length(dif_list)){
-  layer<-dif_list[[i]]
-  increase<-layer
-  decrease<-layer
-  increase[increase < 0]<-NA  
-  decrease[decrease>0]<-NA
-  assign(paste0('increase_gr', i),increase)
-  assign(paste0('decrease_gr', i),decrease)
-  
-}
-
-increase_list<-lapply(ls(pattern='increase_gr'), get)
-decrease_list<-lapply(ls(pattern='decrease_gr'), get)
-
-increase_stack<-stack(increase_list)
-decrease_stack<-stack(decrease_list)
-
-plot(increase_stack)
-plot(decrease_stack)
-
-
-
-#subtropical group; 2, 6,9
-#tropical group: 1, 3, 4, 5, 7, 8
 
 #split in tropical and subtropical
-increase_trop_stack<-increase_stack
-plot(increase_trop_stack)
+trop_stack<-stack(stand_list[c(1,2,3,4,5)])
+subtrop_stack<-stack(stand_list[6])
+
+par(mfrow=c(1,1))
+
+plot(trop_stack)
+
+plot(subtrop_stack)
 
 
-decrease_trop_stack<-decrease_stack
-plot(decrease_trop_stack)
+#where changes
+trop_stack_sum<-(sum(trop_stack)/5) 
+plot(trop_stack_sum)
 
 
-#where changes the most? values between 0, 1 for increase 
+subtrop_stack_sum<-(sum(subtrop_stack)/1)
+plot(subtrop_stack_sum)
 
-library(sdmvspecies)
-
-rescale_increase_trop<-rescale(increase_trop_stack)
-plot(rescale_increase_trop)
-
-trop_increase<-sum(rescale_increase_trop)
-
-
-plot(trop_increase)
-plot(japan_outline, add=TRUE)
-
-#flip the decreases so that highest rates of change are highest(positive values)
-
-flip<-function(x){
-  x/-1
-}
-r <- calc(s, fun=sum)
-
-
-decrease_trop_stack<-flip(decrease_trop_stack)
-decrease_trop_stack<-stack(decrease_trop_stack)
-
-rescale_decrease_trop<-rescale(decrease_trop_stack)
-
-trop_decrease<-(sum(rescale_decrease_trop)/-1)
-
-plot(trop_decrease) 
-
-trop_increase<-rescale(trop_increase)
-trop_decrease<-(rescale(trop_decrease))/-1
-
-library(RColorBrewer)
-library(viridis)
-
-#pal <- viridis(n=20, option='plasma' )
-pal<-viridis(option='plasma', n=40, direction=-1)
-palm<-viridis(option='plasma', n=40)
-
+pall <- c('red3', 'lightsalmon1', 'white', 'cadetblue1', 'blue2')
 
 par(mfrow=c(1,2))
-plot(trop_increase, main='Tropical FG Increase', col=pal)
-plot(japan_outline, add=TRUE, col='light grey', border='light grey')
+plot(trop_stack_sum, col=colorRampPalette(pall[1:5])(25), main='Tropical')
+plot(japan_outline, col='grey68', border='grey68', add=TRUE)
 box()
-plot(trop_decrease, main='Tropical FG Decrease', col=palm)
-plot(japan_outline, add=TRUE, col='light grey', border='light grey')
+plot(trop_stack_sum, col=colorRampPalette(pall[1:5])(25),add=TRUE)
+
+
+plot(subtrop_stack_sum, col=colorRampPalette(pall[1:6])(25), main='Subtropical')
+plot(japan_outline, col='grey68', border='grey68', add=TRUE)
 box()
+plot(subtrop_stack_sum, col=colorRampPalette(pall[1:6])(25),add=TRUE)
 
-par(mfrow=c(1,2))
-plot(trop_decrease, col=pal(50), main='Tropical FG Decrease')
-plot(japan_outline, add=TRUE)
-plot(subtrop_decrease, col=pal(50), main='Subtropical FG Decrease')
-plot(japan_outline, add=TRUE)
+setwd("S:/Beger group/Katie Cook/Japan_data/SDM_course_git")
 
-writeRaster(trop_increase, 'change_hotspots/coral_trop_increase.tif', format='GTiff')
-
-writeRaster(trop_decrease, 'change_hotspots/coral_trop_decrease.tif', format='GTiff')
+writeRaster(subtrop_stack_sum, 'coral_subtrop_hotspots.tif', format='GTiff')
+writeRaster(trop_stack_sum, 'coral_trop_hotspots.tif', format='GTiff')
 
 
-#need to get the same legend
-stack_posterplot<-stack(dif_list[[2]], dif_list[[4]], dif_list[[5]], dif_list[[8]])
 
-par(mfrow=c(2,2),  mai = c(0.3,0.2,0.2,0.2))
 
-plot(stack_posterplot)
 
-p1<-spplot(stack_posterplot, col.regions=terrain.colors)
-p1
-p1+layer(sp.polygons(japan_outline))
+
+
+
+
+
+
+
+
+
+
+
 
 
 
