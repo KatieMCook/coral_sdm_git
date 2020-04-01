@@ -426,7 +426,7 @@ models_all<- function(data){
   rmse_all<-data.frame(glmR=1, gamR=1, rfR=1, glmP=1, gamP=1, RFP=1)  
   
   
-  for (i in 1:100){
+  for (i in 1:1000){
     tryCatch( {
       
     #define test and training data
@@ -746,7 +746,7 @@ for (i in 1:length(extract_all)) {
   glm_gr <-betareg(form, data=extract_all[[i]], link='logit',  na.action=na.omit)
   
   
-  summary(glm1)
+  summary(glm_gr)
   
   
   
@@ -791,25 +791,16 @@ for (i in 1:length(extract_all)) {
   rf_gr<-randomForest(formula=abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + 
                         BO2_chlomean_ss + BO2_lightbotltmax_bdmin, data=extract_all[[i]], ntree=300, importance=TRUE   )
   
-  assign(paste0('glm_gr', i), glm_gr)
-  assign(paste0('gam_gr', i), gam_gr)
-  assign(paste0('rf_gr', i), rf_gr)
+  # #make it so models with significant coefficients go to the ensemble 
   
-  pr_glm<-predict(area_pred, glm_gr, type='response')
-  pr_gam<-predict(area_pred, gam_gr, type='response')
-  pr_rf<-predict(area_pred, rf_gr, type='response')    
   
-  assign(paste0('pr_glm_gr', i), pr_glm)
-  assign(paste0('pr_gam_gr', i), pr_gam)
-  assign(paste0('pr_rf_gr', i), pr_rf)
-  
-  #make it so only the significant models are included 
   
   #make all the RMSE values 1/ themselves so that the larger errors become smaller proportions
   averages[[i]]<- averages[[i]]/((averages[[i]])^2)
   
   
   #extract p values of glm coefs 
+ 
   glm_pvals<- summary(glm_gr)$coefficients$mean[,4]
   #remove intercept column 
   glm_pvals<- glm_pvals[-1]
@@ -818,10 +809,16 @@ for (i in 1:length(extract_all)) {
   if (sum(glm_pvals > 0.05) == length(glm_pvals)){
     averages[[i]][,1]<-0
     average_pear[[i]][,1]<- 0
-  }                        
+  }         
   
   #now say if the RMSE is larger then the mean, proportion= 0
-  if (averages.df[i, 1]> (0.5*(max(extract_all[[i]]$abundance)-min(extract_all[[i]]$abundance))*100)){
+  if (averages.df[i, 1]> (0.5*(max(extract_all[[i]]$abundance)-min(extract_all[[i]]$abundance)))){
+    averages[[i]][,1]<- 0 
+    average_pear[[i]][,1]<-0
+  }
+  
+  #now if the pearsons is smaller than 0.25 make it 0
+  if (averages_pear.df[i, 1]< 0.25) {
     averages[[i]][,1]<- 0 
     average_pear[[i]][,1]<-0
   }
@@ -834,19 +831,52 @@ for (i in 1:length(extract_all)) {
     average_pear[[i]][,2]<-0
   }
   
+  #if pearsons less than 0.25 make zero
+  if (averages_pear.df[i, 2]< 0.25) {
+    averages[[i]][,2]<- 0 
+    average_pear[[i]][,2]<-0
+  }
+  
   #if RMSE is larger then mean make it zero
-  if (averages.df[i, 2]> (0.5*(max(extract_all[[i]]$abundance)-min(extract_all[[i]]$abundance))*100)){
+  if (averages.df[i, 2]> (0.5*(max(extract_all[[i]]$abundance)-min(extract_all[[i]]$abundance)))){
     averages[[i]][,2]<- 0 
     average_pear[[i]][,2]<- 0
   }
   
   #finally for RF
-  if (averages.df[i, 3]> (    (0.5*(max(extract_all[[i]]$abundance)-min(extract_all[[i]]$abundance))*100 ))){
+  if (averages.df[i, 3]> (0.5*(max(extract_all[[i]]$abundance)-min(extract_all[[i]]$abundance)))){
     averages[[i]][,3]<- 0
     average_pear[[i]][,3]<-0
   }
   
+  #if RMSE is larger then mean make it zero
+  if (averages.df[i, 3]> (0.5*(max(extract_all[[i]]$abundance)-min(extract_all[[i]]$abundance)))){
+    averages[[i]][,3]<- 0 
+    average_pear[[i]][,3]<- 0
+  }
   
+  #if pearsons less than 0.25 make zero
+  if (averages_pear.df[i, 3]< 0.25) {
+    averages[[i]][,3]<- 0 
+    average_pear[[i]][,3]<-0
+  }
+  
+  
+
+  
+  assign(paste0('glm_gr', i), glm_gr)
+  assign(paste0('gam_gr', i), gam_gr)
+  assign(paste0('rf_gr', i), rf_gr)
+  
+  pr_glm<-predict(area_pred, glm_gr, type='response')
+  pr_gam<-predict(area_pred, gam_gr, type='response')
+  pr_rf<-predict(area_pred, rf_gr, type='response')    
+  
+  assign(paste0('pr_glm_gr', i), pr_glm)
+  assign(paste0('pr_gam_gr', i), pr_gam)
+  assign(paste0('pr_rf_gr', i), pr_rf)
+  
+
   
   
   
@@ -910,6 +940,7 @@ varImpPlot(rf_gr6)
 
 
 
+
 #plot ensembles
 
 #transparent grey 
@@ -930,6 +961,131 @@ for ( i in 1:length(ens_list)){
   plot(japan_outline, add=TRUE, col=mycol, border=mycol)
   box()
 }
+
+
+####now get RMSE and pear for ensemble #####
+
+#set up data frame to be filled
+
+for (i in 1:length(extract_all)){
+  df<-data.frame(RMSE=1, pear=1)
+  assign(paste0('ensemble_df',i ), df)
+}
+
+ensemble_df<-lapply(ls(pattern="ensemble_df"),get)
+
+#now make loop
+
+for (j in 1:length(extract_all))  {
+  data<-extract_all[[j]]
+  for (i in 1:1000){
+    tryCatch( {
+      
+      #define test and training data
+      test<- data[sample(nrow(data), size=6, replace=FALSE),]  
+      train<- data[(! row.names(data) %in% row.names(test)), ]
+      
+      obvs<-test$abundance
+      
+      
+      #GLM 
+      glm_gr<-glm.nb(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss + BO2_lightbotltmax_bdmin,  data=train)
+      glm1<-step(glm_gr, trace = 0, na.action=na.omit)
+      
+      
+      #GAM
+      gam1<-gam(abundance ~ s(BO_sstmin, k=5) + s(BO2_curvelmax_ss, k=5) + s(BO2_salinitymean_ss, k=5) + s(BO2_chlomean_ss, k=5) + s(BO2_lightbotltmax_bdmin, k=5), family=nb(), data=train)
+      
+      #extract abundance 
+      abundance<-train$abundance
+      abundance<-as.data.frame(abundance)
+      
+      
+      #make df for loop to fill 
+      gam_step_table<-data.frame(summary(gam1)$s.table)
+      out_varib<-row.names(gam_step_table[gam_step_table$p.value>=0.1,])
+      
+      #set up formula to change 
+      form<-formula(paste(abundance, "~ s(BO_sstmin, k=5) + s(BO2_curvelmax_ss, k=5) + s(BO2_salinitymean_ss, k=5) + s(BO2_chlomean_ss, k=5) + s(BO2_lightbotltmax_bdmin, k=5)", sep=""))
+      
+      #run step loop 
+      for(g in out_varib)
+      {
+        g_temp<-paste(unlist(strsplit(g, "\\)")),", k=5)", sep="")
+        
+        if(g_temp=="s(BO_sstmin, k=5)"){form_g1<-update(form, ~. -s(BO_sstmin, k=5, k=5))}
+        if(g_temp=="s(BO2_curvelmax_ss, k=5)"){form_g1<-update(form, ~. -s(BO2_curvelmax_ss, k=5)) }
+        if(g_temp=="s(BO2_salinitymean_ss, k=5)"){form_g1<-update(form, ~. -s(BO2_salinitymean_ss, k=5))}
+        if(g_temp=="s(BO2_chlomean_ss, k=5)"){form_g1<-update(form, ~. -s(BO2_chlomean_ss, k=5))}
+        if(g_temp=="s(BO2_lightbotltmax_bdmin, k=5)"){form_g1<-update(form, ~. -s(BO2_lightbotltmax_bdmin, k=5))}
+        
+        gam2 <-gam(form_g1, data=train,  family=nb(), na.action=na.omit)
+        
+        if(AIC(gam2)<=AIC(gam1)){form<-form_g1
+        print(paste(g, " dropped", sep=""))}
+      }
+      
+      gam1<-gam(form, data=train,  family=nb(), na.action=na.omit)  
+      
+      
+      
+      #RF
+      rf1<-randomForest(formula=abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + 
+                          BO2_chlomean_ss + BO2_lightbotltmax_bdmin, data=train, ntree=300, importance=TRUE   )
+      
+      
+      #predict models for test
+      test_prglm<-predict( glm1, test, type='response')
+      test_prgam<-predict(gam1, test, type='response')
+      test_prRF<-predict(rf1, test, type='response')
+      
+      
+      #ok now ensemble these models
+      #make the ensemble model from RMSE and Pearsons proportions 
+      props<-data.frame(glmR=1, gamR=1, rfR=1, glmP=1, gamP=1, rfP=1)
+      props[1,1]<-(averages[[j]][1,1]/(averages[[j]][1,1]+averages[[j]][1,2]+averages[[j]][1,3]))
+      props[1,2]<-(averages[[j]][1,2]/(averages[[j]][1,1]+averages[[j]][1,2]+averages[[j]][1,3]))
+      props[1,3]<-(averages[[j]][1,3]/(averages[[j]][1,1]+averages[[j]][1,2]+averages[[j]][1,3]))
+      props[1,4]<-abs(average_pear[[j]][1,1])/(abs(average_pear[[j]][1,1])+abs(average_pear[[j]][1,2])+abs(average_pear[[j]][1,3]))
+      props[1,5]<-abs(average_pear[[j]][1,2])/(abs(average_pear[[j]][1,1])+abs(average_pear[[j]][1,2])+abs(average_pear[[j]][1,3]))
+      props[1,6]<-abs(average_pear[[j]][1,3])/(abs(average_pear[[j]][1,1])+abs(average_pear[[j]][1,2])+abs(average_pear[[j]][1,3]))
+      
+      props<-data.frame(glm=((props[1,1]+props[1,4])/(props[1,1]+props[1,2]+props[1,3]+props[1,4]+props[1,5]+props[1,6])), 
+                        gam=((props[1,2]+props[1,5])/(props[1,1]+props[1,2]+props[1,3]+props[1,4]+props[1,5]+props[1,6])),
+                        rf=((props[1,3]+props[1,6])/(props[1,1]+props[1,2]+props[1,3]+props[1,4]+props[1,5]+props[1,6])))
+      
+      
+      ensemble<- ((test_prglm*props[1,1])+(test_prgam*props[1,2])+ (test_prRF*props[1,3]))
+      
+      #now rmse for all
+      ensemble_df[[j]][i,1]<-rmse(obvs, ensemble)
+      
+      #now pearsons correlation for all 
+      ensemble_df[[j]][i,2]<-cor(obvs, ensemble, method = c("pearson"))
+      
+      print(i)
+      
+    } , error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
+    print(j)
+  }
+  
+  
+}
+
+#now get ens averages
+#ok that worked # get averages 
+average_ens_func<-function(data){
+  
+  rmse_av<- mean(data$RMSE , na.rm=TRUE)
+  pear_av<-mean(data$pear, na.rm=TRUE)
+  
+  averages<-data.frame(RMSE=rmse_av, pear=pear_av)
+  
+  return(averages)
+  
+}
+
+average_ens<-lapply( ensemble_df, average_ens_func)
 
 #now future RCP85
 rm(glm_gr)
@@ -1218,13 +1374,13 @@ for (i in 1:length(dif_mask85)){
 #turn all the variables to points then get the coords of points
 
 par(mfrow=c(1,1))
-points<- rasterToPoints(dif_mask85[[2]])
+points<- rasterToPoints(dif_mask85[[4]])
 plot(points)
 coords<-as.data.frame(coordinates(points))
 coords<-coords[,-3]
 
 #extract from the coords
-values<- extract(dif_list85[[2]], coords)
+values<- extract(dif_list85[[4]], coords)
 
 coords$values<-values
 
@@ -1248,8 +1404,10 @@ for (i in 1:length(dif_mask85)){
 
 dif85_values_all<-lapply(ls(pattern='dif85_values_gr'), get)
 
+#2 and 3 dont work 
 #so group the groups shifted (3=4, 4=5, 5=6)
 
+dif85_values_all<-dif85_values_all[-c(2,3)]
 
 #group into 1 df
 for (i in 1: length(dif85_values_all)){
@@ -1259,6 +1417,9 @@ for (i in 1: length(dif85_values_all)){
 
 View(dif85_values_all[[2]])
 
+dif85_values_all[[2]]$group<-4
+dif85_values_all[[3]]$group<-5
+dif85_values_all[[4]]$group<-6
 
 #now merge them all together 
 dif85_all_df<-do.call(rbind, dif85_values_all)
@@ -1305,7 +1466,7 @@ for (i in 1:length(dif_mask26)){
 
 dif26_values_all<-lapply(ls(pattern='dif26_values_gr'), get)
 
-
+dif26_values_all<-dif26_values_all[-c(2,3)]
 
 #group into 1 df
 for (i in 1: length(dif26_values_all)){
@@ -1313,7 +1474,12 @@ for (i in 1: length(dif26_values_all)){
   dif26_values_all[[i]]$climate<-'RCP26'
 }
 
+
 View(dif26_values_all[[1]])
+
+dif26_values_all[[2]]$group<-4
+dif26_values_all[[3]]$group<-5
+dif26_values_all[[4]]$group<-6
 
 #now merge them all together 
 dif26_all_df<-do.call(rbind, dif26_values_all)
@@ -1358,8 +1524,8 @@ for (i in 1:length(stand_list)){
 
 
 #split in tropical and subtropical
-trop_stack<-stack(stand_list[c(1,2,3,4,5)])
-subtrop_stack<-stack(stand_list[6])
+trop_stack<-stack(dif_list85[c(1,4,5)])
+subtrop_stack<-stack(dif_list85[6])
 
 par(mfrow=c(1,1))
 
@@ -1369,7 +1535,7 @@ plot(subtrop_stack)
 
 
 #where changes
-trop_stack_sum<-(sum(trop_stack)/5) 
+trop_stack_sum<-(sum(trop_stack)/3) 
 plot(trop_stack_sum)
 
 
