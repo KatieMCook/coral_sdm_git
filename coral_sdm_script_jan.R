@@ -1,6 +1,6 @@
 
-setwd("S:/Beger group/Katie Cook/Japan_data/coral_sdm_git")
-
+#setwd("S:/Beger group/Katie Cook/Japan_data/coral_sdm_git")
+setwd("D:/corona_contingency/coral_sdm_git")
 
 library(sdmpredictors)
 library(dismo)
@@ -65,7 +65,7 @@ coral_av<- coral_data %>% group_by(genus, site) %>% summarise(abundance=mean(abu
 #now add lat lon on 
 latlon<-read.csv('coralLatlon.csv')
 
-latlon<-latlon[,c(1,3,4)]
+latlon<-latlon[,c(1,4,5)]
 names(latlon)<-c('site', 'lat', 'lon')
 
 latlon$site<-as.character(latlon$site)
@@ -1556,23 +1556,44 @@ plot(japan_outline, col='grey68', border='grey68', add=TRUE)
 box()
 plot(subtrop_stack_sum, col=colorRampPalette(pall[1:6])(25),add=TRUE)
 
-setwd("S:/Beger group/Katie Cook/Japan_data/SDM_course_git")
+setwd("D:/corona_contingency/SDM_course_git")
 
-writeRaster(subtrop_stack_sum, 'coral_subtrop_hotspots.tif', format='GTiff')
-writeRaster(trop_stack_sum, 'coral_trop_hotspots.tif', format='GTiff')
-
-
+writeRaster(subtrop_stack_sum, 'coral_subtrop_hotspots.tif', format='GTiff', overwrite=TRUE)
+writeRaster(trop_stack_sum, 'coral_trop_hotspots.tif', format='GTiff', overwrite=TRUE)
 
 
 
 
 
+### GET DF FOR PCA ----
+#extract dif at lat lons
+latlon<-read.csv('coralLatlon.csv')
+
+latlon<-latlon[,c(2,4,5)]
+names(latlon)<-c('site', 'lat', 'lon')
+
+lonlat<-data.frame(lon=latlon$lon, lat=latlon$lat)
+
+for (i in 1:length(dif_list85)){
+  dif_sites<- extract(dif_list85[[i]], lonlat )
+  dif_sites<-data.frame(site= latlon$site, change= dif_sites)
+  assign(paste0('dif_sites', i), dif_sites)
+}
+
+rm(dif_sites)
+dif_site_list<- lapply(ls(pattern='dif_sites'), get)
+
+#now add on group number to list and unlist into one big df.
+for(i in 1:length(dif_site_list)){
+  dif_site_list[[i]]$group<-paste0('coral', i)
+}
+
+dif_site_all<-do.call(rbind, dif_site_list)
 
 
 
-
-
-
+#now write csv
+write.csv(dif_site_all, 'dif_site_coral.csv')
 
 
 
